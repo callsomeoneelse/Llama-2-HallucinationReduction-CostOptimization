@@ -1,2 +1,105 @@
 # Llama-2---HallucinationReduction-CostOptimization
 MLOps pipeline on GCP for fine-tuning Llama-2-7B with LoRA/QLoRA, achieving 80% inference cost reduction while maintaining &lt;3% hallucination rate
+
+This is the repo our project focusing on evaluating hallucinations in Large Language Models and analyzing the impact of fine-tuning for both in-domain and out-of-domain applications as well as optimizing usage costs. This repository contains instructions and code for fine-tuning, evaluation and analysis of LLMs (LLama-2-7B, ChatGLM-6B, Falcon-7B).
+
+
+Steps for Reproduction
+
+## Environment Setup
+
+**Google Services (Google Cloud)**
+
+1. Create a Google Cloud Compute Instance. This requires activation of your Google Cloud account from free-tier to non-free tier. These are the recommended specifications for the instance:
+   - Region: asia-east-1 (a or c)
+   - GPU: NVIDIA L4 (Initially, a GPU quota increase may need to be requested, which is usually approved within a few minutes)
+   - Machine Type: g2-standard-4 (2 core, 16GB memory)
+   - Boot Disk: Deep Learning on Linux OS, version - Deep Learning VM with CUDA 11.8 M125. Size- 150-200GB. Balanced persistent boot disk type.
+
+(A100 GPU is more ideal, however this GPU is more difficult to acquire and is not available in most regions) 2. The model can then be started and accessed through SSH.
+
+## To run the model
+
+**Model from github:**
+
+1. Clone our GitHub repository using
+
+```
+git clone https://github.com/callsomeoneelse/Llama-2-HallucinationReduction-CostOptimization.git
+```
+
+3. Run the “requirements.txt” file to install necessary dependencies.
+4. Using the meta-llama2 model requires access through HuggingFace. Request access using https://huggingface.co/meta-llama/Llama-2-7b-chat-hf, and create an access token that can be used to login from the Google Cloud Instance.
+5. Use “huggingface-cli login”, and enter your huggingface access token created earlier to gain access to the models from the virtual machine. This only needs to be done once.
+
+**Evaluation code:**
+
+1. Move into the evaluation directory and run the evaluation code:
+   - Specify the evaluated task (qa, dialogue or summarization)
+2. Choose one of the models to run evaluation on:
+   <img width="584" alt="Screenshot 2024-10-10 at 10 37 41 PM" src="https://github.com/user-attachments/assets/1d5a667e-4306-454b-b450-12f0c5079caa">
+
+```
+   cd LLM-Halucination_
+   python evaluate.py –-task qa --model Llama2
+```
+
+**Analysis Code**
+
+There are some additional steps to ensure that the analysis code executes without error:
+
+1. Reinstall specific numpy version:
+
+```
+pip uninstall numpy
+pip install numpy==1.26.4
+```
+
+2. Download two modules:
+
+```
+python -m nltk.downloader stopwords
+python -m spacy download en_core_web_sm
+```
+
+Now the analysis can now be executed:
+
+1. Navigate to the analysis directory:
+
+```
+cd analysis
+```
+
+2. Run the analysis code:
+
+```
+python analyze.py --task qa --result ../evaluation/qa/qa_Llama-2-7b-chat-hf_results.json --category all
+```
+
+You can choose which task to run analysis on, and specify the path to the specific evaluation result files.
+The complete setup and execution can be run on a local machine, given that the appropriate hardware resources are available (At least 16GB of GPU RAM.)
+
+## Finetuning execution
+
+Now the analysis can now be executed:
+
+1. Navigate to the qlora-main directory:
+```
+cd scripts
+ls scripts
+```
+In the scripts folder you will find the input commands for the models evaluated in our testing. This script can be entered in upon the next step to recreate the LORA or QLORA adapter used.
+```
+cd ..
+python qlora.py 
+```
+2. Run the qlora.py code followed by the parameters included in the scripts folder:
+These following inputs will be taken from the scripts folder mentioned previously and the selected model that you wish to run.
+```
+3. Problem solving
+Depending on the resources used to train the model an issue encountered on Google Cloud was that the code would only execute while the session is open. In this case you may wish to run prefaced with nohup.
+```
+nohup python qlora.py *insert script*
+```
+4. Once complete the Fine tuned model will be saved in its own folder allong with any checkpoints saved.
+
