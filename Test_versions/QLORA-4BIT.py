@@ -52,7 +52,7 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
     llm_int8_threshold=6.0
 )
-os.environ["HF_HOME"] = "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"
+os.environ["HF_HOME"] = "YOUR-HF-TOKEN"
 # Load the model and tokenizer
 model_name = "meta-llama/Llama-2-7b-chat-hf"
 model = AutoModelForCausalLM.from_pretrained(
