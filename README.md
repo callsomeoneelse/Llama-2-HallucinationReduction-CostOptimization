@@ -101,5 +101,5 @@ Depending on the resources used to train the model an issue encountered on Googl
 ```
 nohup python qlora.py *insert script*
 ```
-4. Once complete the Fine tuned model will be saved in its own folder allong with any checkpoints saved.
+4. Once complete the Fine tuned model will be saved in its own folder along with any checkpoints saved.
 
