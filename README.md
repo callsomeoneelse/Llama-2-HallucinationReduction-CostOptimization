@@ -1,4 +1,4 @@
-# Llama-2---HallucinationReduction-CostOptimization
+# Llama-2-HallucinationReduction-CostOptimization
 MLOps pipeline on GCP for fine-tuning Llama-2-7B with LoRA/QLoRA, achieving 80% inference cost reduction while maintaining &lt;3% hallucination rate
 
 This is the repo our project focusing on evaluating hallucinations in Large Language Models and analyzing the impact of fine-tuning for both in-domain and out-of-domain applications as well as optimizing usage costs. This repository contains instructions and code for fine-tuning, evaluation and analysis of LLMs (LLama-2-7B, ChatGLM-6B, Falcon-7B).
