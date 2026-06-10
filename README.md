@@ -1,105 +1,230 @@
-# Llama-2-HallucinationReduction-CostOptimization
-MLOps pipeline on GCP for fine-tuning Llama-2-7B with LoRA/QLoRA, achieving 80% inference cost reduction while maintaining &lt;3% hallucination rate
+# LLM Hallucination Reduction & Cost Optimisation
 
-This is the repo our project focusing on evaluating hallucinations in Large Language Models and analyzing the impact of fine-tuning for both in-domain and out-of-domain applications as well as optimizing usage costs. This repository contains instructions and code for fine-tuning, evaluation and analysis of LLMs (LLama-2-7B, ChatGLM-6B, Falcon-7B).
+![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-orange?logo=pytorch)
+![HuggingFace](https://img.shields.io/badge/HuggingFace-Transformers-yellow?logo=huggingface)
+![GCP](https://img.shields.io/badge/Google_Cloud-MLOps-blue?logo=googlecloud)
+![License](https://img.shields.io/badge/License-MIT-green)
 
+An MLOps pipeline on Google Cloud Platform for fine-tuning large language models using LoRA and QLoRA, reducing GPU VRAM requirements from 28GB to ~10GB through 8-bit quantisation, enabling deployment on hardware costing roughly 70–75% less while maintaining hallucination detection accuracy on the HaluEval benchmark.
 
-Steps for Reproduction
+---
 
-## Environment Setup
+## Table of Contents
+- [Overview](#overview)
+- [Results](#results)
+- [Models Evaluated](#models-evaluated)
+- [Project Structure](#project-structure)
+- [Architecture](#architecture)
+- [Getting Started](#getting-started)
+- [Usage](#usage)
 
-**Google Services (Google Cloud)**
+---
 
-1. Create a Google Cloud Compute Instance. This requires activation of your Google Cloud account from free-tier to non-free tier. These are the recommended specifications for the instance:
-   - Region: asia-east-1 (a or c)
-   - GPU: NVIDIA L4 (Initially, a GPU quota increase may need to be requested, which is usually approved within a few minutes)
-   - Machine Type: g2-standard-4 (2 core, 16GB memory)
-   - Boot Disk: Deep Learning on Linux OS, version - Deep Learning VM with CUDA 11.8 M125. Size- 150-200GB. Balanced persistent boot disk type.
+## Overview
 
-(A100 GPU is more ideal, however this GPU is more difficult to acquire and is not available in most regions) 2. The model can then be started and accessed through SSH.
+Deploying large language models at scale is expensive. Naive inference with full-precision models consumes significant GPU resources, making production deployment economically unviable for many organisations.
 
-## To run the model
+This project investigates whether quantisation and parameter-efficient fine-tuning (LoRA/QLoRA) can reduce inference costs without meaningfully degrading hallucination detection accuracy — evaluating across three task types and multiple model variants.
 
-**Model from github:**
+**Core questions:**
+1. How does 4-bit and 8-bit quantisation affect hallucination detection accuracy on the HaluEval benchmark?
+2. Does fine-tuning on in-domain and out-of-domain datasets improve accuracy over the base model?
+3. How do different model sizes compare across QA, dialogue, and summarisation tasks?
 
-1. Clone our GitHub repository using
+**Evaluation benchmark:** HaluEval — 30,000 task-specific examples across question answering, knowledge-grounded dialogue, and text summarisation.
+
+---
+
+## Results
+
+### Base Model Comparison
+
+Evaluated on HaluEval across QA, dialogue, and summarisation tasks (10,000 samples per task).
+
+| Model | QA Accuracy | Dialogue Accuracy | Summarisation Accuracy |
+|-------|-------------|-------------------|------------------------|
+| Llama-2-7B-chat | **55.3%** | **57.7%** | **46.8%** |
+| Opt-1.3B | 52.0% | 48.0% | — |
+| ChatGLM-6B | 50.7% | 49.8% | — |
+| Falcon-7B | 50.2% | 40.0% | — |
+
+> Llama-2-7B demonstrated the highest accuracy across all three tasks. Smaller models (ChatGLM, Falcon, OPT) performed near chance level (~50%), attributed to the subtlety of hallucinated answers in the HaluEval dataset. Summarisation evaluation was omitted for smaller models due to token length truncation significantly increasing evaluation time.
+
+---
+
+### QLoRA Fine-Tuning Results (Llama-2-7B, QA Task)
+
+| Configuration | QA Accuracy | Notes |
+|---------------|-------------|-------|
+| Llama-2-7B base (FP16) | 55.3% | Baseline |
+| Llama-2-7B Q8 (no fine-tuning) | 56.4% | 8-bit quantisation only |
+| Llama-2-7B Q8 + QLoRA (HotpotQA) | **57.0%** | Best result — in-domain fine-tuning |
+| Llama-2-7B Q8 + QLoRA (Google HAR) | 56.5% | Out-of-domain fine-tuning |
+| Llama-2-7B Q4 (no fine-tuning) | 51.2% | 4-bit quantisation only |
+| Llama-2-7B Q4 + QLoRA (HotpotQA) | 50.9% | Regression vs base |
+
+**Key finding:** 8-bit quantisation provided the best balance between cost efficiency and performance — maintaining accuracy above the FP16 baseline with significantly reduced hardware requirements. 4-bit quantisation introduced regression, making it unsuitable for this evaluation task despite its greater resource savings.
+
+---
+
+### Cost vs Performance Trade-off
+
+| Configuration | GPU VRAM Required | Accuracy (QA) |
+|---------------|-------------------|---------------|
+| FP16 (full precision) | 28GB+ | 55.3% |
+| 8-bit quantisation | ~10GB | 56.4–57.0% |
+| 4-bit quantisation | ~6GB | 50.9–51.2% |
+
+> 8-bit QLoRA reduces VRAM requirements from 28GB to ~10GB, enabling deployment on hardware costing roughly 70–75% less than the A100-class GPUs required for full-precision inference — while matching or slightly exceeding the FP16 baseline on the HaluEval benchmark.
+
+---
+
+## Models Evaluated
+
+| Model | Parameters | Quantisation Tested |
+|-------|------------|---------------------|
+| Llama-2-7B-chat | 7B | FP16, 8-bit, 4-bit |
+| ChatGLM-6B | 6B | FP16 |
+| Falcon-7B | 7B | FP16 |
+| OPT-1.3B | 1.3B | FP16 |
+
+All models accessed via Hugging Face Transformers. Llama-2 requires access approval at [huggingface.co/meta-llama](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf).
+
+---
+
+## Datasets
+
+| Dataset | Task | Usage |
+|---------|------|-------|
+| HotpotQA | QA | In-domain fine-tuning |
+| Google HAR (CFTriviaQA) | QA | Out-of-domain fine-tuning |
+| OpenDialKG | Dialogue | Evaluation |
+| CNN/DailyMail | Summarisation | Evaluation |
+
+---
+
+## Project Structure
 
 ```
+Llama-2-HallucinationReduction-CostOptimization/
+│
+├── LLM-Halucination_/          # Evaluation module
+│   └── evaluate.py             # HaluEval benchmark evaluation across tasks and models
+│
+├── analysis/                   # Analysis module
+│   └── analyze.py              # Result analysis and reporting
+│
+├── scripts/                    # Pre-configured fine-tuning scripts per model
+│
+├── qlora.py                    # QLoRA/LoRA fine-tuning entry point
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## Architecture
+
+```
+Datasets (HotpotQA / Google HAR / OpenDialKG / CNN-DailyMail)
+           ↓
+  LoRA / QLoRA Fine-tuning (GCP — NVIDIA L4 GPU, CUDA 11.8)
+           ↓
+  Quantisation (FP16 → 8-bit → 4-bit via bitsandbytes)
+           ↓
+  HaluEval Benchmark Evaluation (QA / Dialogue / Summarisation)
+           ↓
+  Cross-model Accuracy Comparison & Cost Analysis
+```
+
+**Infrastructure:** Google Cloud Platform Compute Engine — NVIDIA L4 GPU, g2-standard-4 (4 vCPU, 16GB RAM), Deep Learning VM with CUDA 11.8.
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.10+
+- NVIDIA GPU with 10GB+ VRAM for 8-bit, 6GB+ for 4-bit (NVIDIA L4 recommended)
+- Google Cloud account with GPU quota, or equivalent local hardware
+- Hugging Face account with Llama-2 access approved
+
+### Installation
+
+```bash
+# Clone the repository
 git clone https://github.com/callsomeoneelse/Llama-2-HallucinationReduction-CostOptimization.git
-```
+cd Llama-2-HallucinationReduction-CostOptimization
 
-3. Run the “requirements.txt” file to install necessary dependencies.
-4. Using the meta-llama2 model requires access through HuggingFace. Request access using https://huggingface.co/meta-llama/Llama-2-7b-chat-hf, and create an access token that can be used to login from the Google Cloud Instance.
-5. Use “huggingface-cli login”, and enter your huggingface access token created earlier to gain access to the models from the virtual machine. This only needs to be done once.
+# Install dependencies
+pip install -r requirements.txt
 
-**Evaluation code:**
-
-1. Move into the evaluation directory and run the evaluation code:
-   - Specify the evaluated task (qa, dialogue or summarization)
-2. Choose one of the models to run evaluation on:
-   <img width="584" alt="Screenshot 2024-10-10 at 10 37 41 PM" src="https://github.com/user-attachments/assets/1d5a667e-4306-454b-b450-12f0c5079caa">
-
-```
-   cd LLM-Halucination_
-   python evaluate.py –-task qa --model Llama2
-```
-
-**Analysis Code**
-
-There are some additional steps to ensure that the analysis code executes without error:
-
-1. Reinstall specific numpy version:
-
-```
-pip uninstall numpy
+# Fix numpy compatibility (required)
+pip uninstall numpy -y
 pip install numpy==1.26.4
-```
 
-2. Download two modules:
-
-```
+# Download required NLP modules
 python -m nltk.downloader stopwords
 python -m spacy download en_core_web_sm
 ```
 
-Now the analysis can now be executed:
+### Hugging Face Authentication
 
-1. Navigate to the analysis directory:
+Llama-2 requires access approval and authentication:
 
+```bash
+huggingface-cli login
+# Enter your Hugging Face access token when prompted
+# Only required once per machine
 ```
+
+---
+
+## Usage
+
+### 1. Evaluation
+
+```bash
+cd LLM-Halucination_
+python evaluate.py --task qa --model Llama2
+```
+
+**Task options:** `qa`, `dialogue`, `summarization`
+**Model options:** `Llama2`, `ChatGLM`, `Falcon`
+
+### 2. Analysis
+
+```bash
 cd analysis
-```
-
-2. Run the analysis code:
-
-```
 python analyze.py --task qa --result ../evaluation/qa/qa_Llama-2-7b-chat-hf_results.json --category all
 ```
 
-You can choose which task to run analysis on, and specify the path to the specific evaluation result files.
-The complete setup and execution can be run on a local machine, given that the appropriate hardware resources are available (At least 16GB of GPU RAM.)
+### 3. Fine-tuning
 
-## Finetuning execution
+Pre-configured fine-tuning scripts for each model are in the `scripts/` directory.
 
-Now the analysis can now be executed:
+```bash
+# Run QLoRA fine-tuning with a model script
+python qlora.py <insert script parameters>
 
-1. Navigate to the qlora-main directory:
+# For long-running jobs on cloud instances (prevents session timeout)
+nohup python qlora.py <insert script parameters>
 ```
-cd scripts
-ls scripts
-```
-In the scripts folder you will find the input commands for the models evaluated in our testing. This script can be entered in upon the next step to recreate the LORA or QLORA adapter used.
-```
-cd ..
-python qlora.py 
-```
-2. Run the qlora.py code followed by the parameters included in the scripts folder:
-These following inputs will be taken from the scripts folder mentioned previously and the selected model that you wish to run.
-```
-3. Problem solving
-Depending on the resources used to train the model an issue encountered on Google Cloud was that the code would only execute while the session is open. In this case you may wish to run prefaced with nohup.
-```
-nohup python qlora.py *insert script*
-```
-4. Once complete the Fine tuned model will be saved in its own folder along with any checkpoints saved.
 
+Once complete, the fine-tuned adapter and checkpoints are saved to their own directory.
+
+---
+
+## GCP Setup
+
+| Setting | Value |
+|---------|-------|
+| Region | asia-east-1 (a or c) |
+| GPU | NVIDIA L4 |
+| Machine type | g2-standard-4 (4 vCPU, 16GB RAM) |
+| Boot disk | Deep Learning VM with CUDA 11.8 M125 |
+| Disk size | 150–200GB balanced persistent |
+
+> A GPU quota increase may be required on first use — typically approved within minutes via the GCP console. The model is deployed at half precision (FP16) as full precision requires 28GB+ VRAM, exceeding the L4's 24GB capacity.
